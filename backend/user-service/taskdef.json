@@ -1,0 +1,62 @@
+﻿{
+    "containerDefinitions": [
+        {
+            "name": "user-service",
+            "image": "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-user-service:latest",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 8080,
+                    "hostPort": 8080,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "DB_HOST",
+                    "value": "taskflow-pro-db.cdck0ym6kc7j.ap-south-1.rds.amazonaws.com"
+                },
+                {
+                    "name": "DB_PORT",
+                    "value": "3306"
+                },
+                {
+                    "name": "DB_NAME",
+                    "value": "taskflow"
+                }
+            ],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "secrets": [
+                {
+                    "name": "DB_USERNAME",
+                    "valueFrom": "arn:aws:secretsmanager:ap-south-1:253924916082:secret:taskflow/pro/database-FR6obO:username::"
+                },
+                {
+                    "name": "DB_PASSWORD",
+                    "valueFrom": "arn:aws:secretsmanager:ap-south-1:253924916082:secret:taskflow/pro/database-FR6obO:password::"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/taskflow/user-service",
+                    "awslogs-region": "ap-south-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "systemControls": []
+        }
+    ],
+    "family": "taskflow-user-service",
+    "executionRoleArn": "arn:aws:iam::253924916082:role/taskflow-ecs-task-execution-role",
+    "networkMode": "awsvpc",
+    "volumes": [],
+    "placementConstraints": [],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "256",
+    "memory": "512"
+}
