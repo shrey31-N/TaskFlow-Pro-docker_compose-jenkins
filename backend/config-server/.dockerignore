@@ -1,0 +1,9 @@
+target/
+*.class
+.idea/
+*.iml
+*.log
+.mvn/wrapper/maven-wrapper.jar
+_to_delete/
+mvnw
+mvnw.cmd

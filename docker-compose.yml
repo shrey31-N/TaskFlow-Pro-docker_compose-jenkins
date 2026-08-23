@@ -1,103 +1,218 @@
-version: '3.9'
+# Full TaskFlow-Pro stack: MySQL, all backend microservices, and the
+# frontend. Every backend/frontend service is built from its own
+# Dockerfile - no external images required beyond mysql/nginx bases.
+#
+# Usage:
+#   1. Copy .env.example to .env and fill in JWT_SECRET / ADMIN_SECRET_KEY
+#      (and AWS_* if you're using S3 profile-picture uploads).
+#   2. docker compose up --build
+#
+# App entry point: http://localhost:3000
+# API gateway (direct):  http://localhost:8080
+# Eureka dashboard:      http://localhost:8761
 
 services:
 
   mysql:
     image: mysql:8.0
     container_name: taskflow-mysql
-    restart: always
-
+    restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: taskflow_db
-      MYSQL_USER: taskflow
-      MYSQL_PASSWORD: taskflow123
-
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-taskflow_db}
+      MYSQL_USER: ${DB_USERNAME:-taskflow}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-taskflow123}
     ports:
       - "3307:3306"
-
     volumes:
       - mysql-data:/var/lib/mysql
-
     networks:
       - taskflow-network
-
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 10s
       timeout: 5s
       retries: 10
 
+  discovery-server:
+    build: ./backend/discovery-server
+    container_name: taskflow-discovery-server
+    restart: unless-stopped
+    ports:
+      - "8761:8761"
+    networks:
+      - taskflow-network
+    healthcheck:
+      # No actuator dependency in this service, so this checks the Eureka
+      # dashboard root path instead of /actuator/health.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8761/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  config-server:
+    build: ./backend/config-server
+    container_name: taskflow-config-server
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    networks:
+      - taskflow-network
+    # Standalone: every service currently runs with spring.cloud.config.enabled=false,
+    # so nothing depends on this yet. Included for completeness / future use.
 
   user-service:
-    image: taskflow-user-service:v1
+    build: ./backend/user-service
     container_name: taskflow-user-service
-
+    restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
-
+      discovery-server:
+        condition: service_healthy
     ports:
       - "8081:8081"
-
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/taskflow_db
-      SPRING_DATASOURCE_USERNAME: taskflow
-      SPRING_DATASOURCE_PASSWORD: taskflow123
-
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-taskflow_db}
+      DB_USERNAME: ${DB_USERNAME:-taskflow}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow123}
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your .env file}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600000}
+      ADMIN_SECRET_KEY: ${ADMIN_SECRET_KEY:?Set ADMIN_SECRET_KEY in your .env file}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-taskflow-pro-profile-images}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     networks:
       - taskflow-network
-
-    restart: unless-stopped
-
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   project-service:
-    image: taskflow-project-service:v1
+    build: ./backend/project-service
     container_name: taskflow-project-service
-
+    restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
-
+      discovery-server:
+        condition: service_healthy
     ports:
       - "8082:8082"
-
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/taskflow_db
-      SPRING_DATASOURCE_USERNAME: taskflow
-      SPRING_DATASOURCE_PASSWORD: taskflow123
-
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-taskflow_db}
+      DB_USERNAME: ${DB_USERNAME:-taskflow}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow123}
+      EUREKA_URL: http://discovery-server:8761/eureka/
     networks:
       - taskflow-network
-
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   task-service:
-
-    image: taskflow-task-service:v1
-
+    build: ./backend/task-service
     container_name: taskflow-task-service
-
+    restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
-
+      discovery-server:
+        condition: service_healthy
     ports:
       - "8083:8083"
-
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/taskflow_db
-      SPRING_DATASOURCE_USERNAME: taskflow
-      SPRING_DATASOURCE_PASSWORD: taskflow123
-
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-taskflow_db}
+      DB_USERNAME: ${DB_USERNAME:-taskflow}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow123}
+      EUREKA_URL: http://discovery-server:8761/eureka/
     networks:
       - taskflow-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
+  notification-service:
+    build: ./backend/notification-service
+    container_name: taskflow-notification-service
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:-taskflow_db}
+      DB_USERNAME: ${DB_USERNAME:-taskflow}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow123}
+      EUREKA_URL: http://discovery-server:8761/eureka/
+    networks:
+      - taskflow-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
-volumes:
-  mysql-data:
+  api-gateway:
+    build: ./backend/api-gateway
+    container_name: taskflow-api-gateway
+    restart: unless-stopped
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      project-service:
+        condition: service_healthy
+      task-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_URL: http://discovery-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your .env file}
+    networks:
+      - taskflow-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
+  frontend:
+    build: ./frontend
+    container_name: taskflow-frontend
+    restart: unless-stopped
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    networks:
+      - taskflow-network
 
 networks:
   taskflow-network:
     driver: bridge
+
+volumes:
+  mysql-data:
