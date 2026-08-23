@@ -34,6 +34,8 @@ services:
       timeout: 5s
       retries: 10
 
+#Discover service
+
   discovery-server:
     build: ./backend/discovery-server
     container_name: taskflow-discovery-server

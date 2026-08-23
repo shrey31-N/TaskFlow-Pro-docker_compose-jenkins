@@ -27,6 +27,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/users/register",
+            "/api/users/register-admin",
             "/api/users/login",
             "/swagger-ui/**",
             "/swagger-ui.html",
