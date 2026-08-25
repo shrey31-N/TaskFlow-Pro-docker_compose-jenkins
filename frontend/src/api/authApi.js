@@ -10,6 +10,15 @@ export const registerUser = async (userData) => {
     return response.data;
 };
 
+// Creates an Admin account directly - gated by the admin secret key on
+// the backend (validated server-side against ADMIN_SECRET_KEY), not by
+// anything in this UI. A wrong/missing key is rejected by the backend
+// regardless of what gets submitted here.
+export const registerAdmin = async (userData) => {
+    const response = await api.post("/users/register-admin", userData);
+    return response.data;
+};
+
 export const loginUser = async (credentials) => {
     const response = await api.post("/users/login", credentials);
     return response.data;

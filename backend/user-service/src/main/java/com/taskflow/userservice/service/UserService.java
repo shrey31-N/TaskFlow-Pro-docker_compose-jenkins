@@ -116,7 +116,7 @@ public class UserService {
 
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
 
-        String token = jwtService.generateToken(userDetails.getEmail(), userDetails.getRole().name());
+        String token = jwtService.generateToken(userDetails.getId(), userDetails.getEmail(), userDetails.getRole().name());
 
         return LoginResponse.builder()
                 .token(token)

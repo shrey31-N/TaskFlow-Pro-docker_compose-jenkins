@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
+    CheckCircle2,
     ListTodo,
     Pencil,
     Plus,
@@ -11,14 +12,17 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
+import { getAllUsers } from "../api/authApi";
 import { getProjects } from "../api/projectApi";
 import {
     createTask,
     deleteTask,
     getTasksByProject,
+    getTasksByUser,
     getTasksPaginated,
     searchTasks,
     updateTask,
+    updateTaskStatus,
 } from "../api/taskApi";
 import { getErrorMessage } from "../utils/errors";
 
@@ -78,6 +82,7 @@ function Tasks() {
     const [totalElements, setTotalElements] = useState(0);
 
     const [projects, setProjects] = useState([]);
+    const [users, setUsers] = useState([]);
 
     const [projectFilter, setProjectFilter] = useState(searchParams.get("projectId") || "");
     const [statusFilter, setStatusFilter] = useState("");
@@ -95,11 +100,22 @@ function Tasks() {
 
     const [deletingId, setDeletingId] = useState(null);
 
+    const [statusModalTask, setStatusModalTask] = useState(null);
+    const [statusValue, setStatusValue] = useState("TODO");
+    const [statusError, setStatusError] = useState("");
+    const [statusSaving, setStatusSaving] = useState(false);
+
     const projectsById = useMemo(() => {
         const map = new Map();
         projects.forEach((project) => map.set(String(project.id), project.name));
         return map;
     }, [projects]);
+
+    const usersById = useMemo(() => {
+        const map = new Map();
+        users.forEach((u) => map.set(String(u.id), u.fullName));
+        return map;
+    }, [users]);
 
     useEffect(() => {
         getProjects(0, 100)
@@ -107,39 +123,78 @@ function Tasks() {
             .catch(() => setProjects([]));
     }, []);
 
+    // The name-based assignee picker (and the resolved Assignee column) only
+    // needs the full user list for admins - GET /api/users is admin-only on
+    // the gateway, so members never call it.
+    useEffect(() => {
+        if (!isAdmin) return;
+
+        getAllUsers()
+            .then((data) => setUsers(Array.isArray(data) ? data : []))
+            .catch(() => setUsers([]));
+    }, [isAdmin]);
+
+    const loadAdminTasks = async () => {
+        let list;
+        let usesPagination = false;
+
+        if (activeSearch) {
+            list = await searchTasks(activeSearch);
+        } else if (projectFilter) {
+            list = await getTasksByProject(projectFilter);
+        } else {
+            const data = await getTasksPaginated(page, PAGE_SIZE, "id");
+            list = data?.content ?? [];
+            setTotalPages(data?.totalPages ?? 0);
+            setTotalElements(data?.totalElements ?? 0);
+            usesPagination = true;
+        }
+
+        if (!usesPagination) {
+            setTotalPages(1);
+            setTotalElements(Array.isArray(list) ? list.length : 0);
+        }
+
+        return (Array.isArray(list) ? list : []).filter((task) => {
+            if (statusFilter && task.status !== statusFilter) return false;
+            if (activeSearch && projectFilter && String(task.projectId) !== String(projectFilter)) {
+                return false;
+            }
+            return true;
+        });
+    };
+
+    // Members only ever see their own tasks - fetched once from the
+    // dedicated endpoint, then filtered locally so search/status/project
+    // filters never have to reach into other people's tasks.
+    const loadMemberTasks = async () => {
+        const list = await getTasksByUser(user.id);
+        const all = Array.isArray(list) ? list : [];
+
+        const filtered = all.filter((task) => {
+            if (statusFilter && task.status !== statusFilter) return false;
+            if (projectFilter && String(task.projectId) !== String(projectFilter)) return false;
+            if (
+                activeSearch &&
+                !task.title?.toLowerCase().includes(activeSearch.toLowerCase())
+            ) {
+                return false;
+            }
+            return true;
+        });
+
+        setTotalPages(1);
+        setTotalElements(filtered.length);
+
+        return filtered;
+    };
+
     const loadTasks = async () => {
         setLoading(true);
         setError("");
 
         try {
-            let list;
-            let usesPagination = false;
-
-            if (activeSearch) {
-                list = await searchTasks(activeSearch);
-            } else if (projectFilter) {
-                list = await getTasksByProject(projectFilter);
-            } else {
-                const data = await getTasksPaginated(page, PAGE_SIZE, "id");
-                list = data?.content ?? [];
-                setTotalPages(data?.totalPages ?? 0);
-                setTotalElements(data?.totalElements ?? 0);
-                usesPagination = true;
-            }
-
-            if (!usesPagination) {
-                setTotalPages(1);
-                setTotalElements(Array.isArray(list) ? list.length : 0);
-            }
-
-            const filtered = (Array.isArray(list) ? list : []).filter((task) => {
-                if (statusFilter && task.status !== statusFilter) return false;
-                if (activeSearch && projectFilter && String(task.projectId) !== String(projectFilter)) {
-                    return false;
-                }
-                return true;
-            });
-
+            const filtered = isAdmin ? await loadAdminTasks() : await loadMemberTasks();
             setTasks(filtered);
         } catch (loadError) {
             setError(getErrorMessage(loadError, "Couldn't load tasks."));
@@ -150,10 +205,12 @@ function Tasks() {
     };
 
     useEffect(() => {
+        if (!isAdmin && !user?.id) return;
+
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTasks();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, projectFilter, statusFilter, activeSearch]);
+    }, [page, projectFilter, statusFilter, activeSearch, isAdmin, user?.id]);
 
     const handleProjectFilterChange = (value) => {
         setProjectFilter(value);
@@ -179,7 +236,7 @@ function Tasks() {
 
     const openCreateModal = () => {
         setEditingTask(null);
-        setFormData(emptyForm(projectFilter, user?.id));
+        setFormData(emptyForm(projectFilter, ""));
         setFormError("");
         setModalOpen(true);
     };
@@ -254,21 +311,56 @@ function Tasks() {
         }
     };
 
-    const showingPagination = !activeSearch && !projectFilter && totalPages > 1;
+    const openStatusModal = (task) => {
+        setStatusModalTask(task);
+        setStatusValue(task.status || "TODO");
+        setStatusError("");
+    };
+
+    const closeStatusModal = () => {
+        setStatusModalTask(null);
+        setStatusError("");
+    };
+
+    const handleStatusSave = async (event) => {
+        event.preventDefault();
+        if (!statusModalTask) return;
+
+        setStatusSaving(true);
+        setStatusError("");
+
+        try {
+            await updateTaskStatus(statusModalTask.id, statusValue);
+            closeStatusModal();
+            await loadTasks();
+        } catch (saveError) {
+            setStatusError(getErrorMessage(saveError, "Couldn't update task status."));
+        } finally {
+            setStatusSaving(false);
+        }
+    };
+
+    const showingPagination = isAdmin && !activeSearch && !projectFilter && totalPages > 1;
 
     return (
         <>
 
             <div className="page-header">
                 <div>
-                    <h1>Tasks</h1>
-                    <p>Track work across every project, from to-do to done.</p>
+                    <h1>{isAdmin ? "Tasks" : "My Tasks"}</h1>
+                    <p>
+                        {isAdmin
+                            ? "Track work across every project, from to-do to done."
+                            : "Tasks assigned to you, from to-do to done."}
+                    </p>
                 </div>
 
-                <button className="primary-button" onClick={openCreateModal}>
-                    <Plus size={18} />
-                    New Task
-                </button>
+                {isAdmin && (
+                    <button className="primary-button" onClick={openCreateModal}>
+                        <Plus size={18} />
+                        New Task
+                    </button>
+                )}
             </div>
 
             {error && <div className="error-banner">{error}</div>}
@@ -370,18 +462,33 @@ function Tasks() {
                                                 : "-"}
                                         </td>
                                         <td className="muted-cell">
-                                            User #{task.assignedUserId}
+                                            {isAdmin
+                                                ? usersById.get(String(task.assignedUserId)) ||
+                                                  `User #${task.assignedUserId}`
+                                                : "You"}
                                         </td>
                                         <td>
                                             <div className="row-actions">
 
-                                                <button
-                                                    className="icon-button"
-                                                    title="Edit task"
-                                                    onClick={() => openEditModal(task)}
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        className="icon-button"
+                                                        title="Edit task"
+                                                        onClick={() => openEditModal(task)}
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </button>
+                                                )}
+
+                                                {!isAdmin && (
+                                                    <button
+                                                        className="icon-button"
+                                                        title="Update status"
+                                                        onClick={() => openStatusModal(task)}
+                                                    >
+                                                        <CheckCircle2 size={16} />
+                                                    </button>
+                                                )}
 
                                                 {isAdmin && (
                                                     <button
@@ -429,7 +536,7 @@ function Tasks() {
 
             </div>
 
-            {modalOpen && (
+            {isAdmin && modalOpen && (
                 <div className="modal-backdrop" onClick={closeModal}>
                     <div className="modal" onClick={(event) => event.stopPropagation()}>
 
@@ -541,16 +648,23 @@ function Tasks() {
                             </div>
 
                             <div className="field">
-                                <label htmlFor="task-assignedUserId">Assignee User ID</label>
-                                <input
+                                <label htmlFor="task-assignedUserId">Assignee</label>
+                                <select
                                     id="task-assignedUserId"
                                     name="assignedUserId"
-                                    type="number"
-                                    min="1"
                                     value={formData.assignedUserId}
                                     onChange={handleFormChange}
                                     required
-                                />
+                                >
+                                    <option value="" disabled>
+                                        Select a team member
+                                    </option>
+                                    {users.map((u) => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.fullName} (#{u.id})
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
 
                             <div className="modal-actions">
@@ -568,6 +682,64 @@ function Tasks() {
                                     disabled={saving}
                                 >
                                     {saving ? "Saving..." : "Save Task"}
+                                </button>
+                            </div>
+
+                        </form>
+
+                    </div>
+                </div>
+            )}
+
+            {!isAdmin && statusModalTask && (
+                <div className="modal-backdrop" onClick={closeStatusModal}>
+                    <div className="modal" onClick={(event) => event.stopPropagation()}>
+
+                        <div className="modal-header">
+                            <h2>Update Status</h2>
+                            <button className="icon-button" onClick={closeStatusModal}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <p className="empty-hint" style={{ marginBottom: "12px" }}>
+                            {statusModalTask.title}
+                        </p>
+
+                        {statusError && <div className="error-banner">{statusError}</div>}
+
+                        <form onSubmit={handleStatusSave}>
+
+                            <div className="field">
+                                <label htmlFor="status-only-select">Status</label>
+                                <select
+                                    id="status-only-select"
+                                    value={statusValue}
+                                    onChange={(event) => setStatusValue(event.target.value)}
+                                >
+                                    {STATUS_OPTIONS.map((status) => (
+                                        <option key={status} value={status}>
+                                            {statusLabel(status)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={closeStatusModal}
+                                >
+                                    Cancel
+                                </button>
+
+                                <button
+                                    type="submit"
+                                    className="primary-button"
+                                    disabled={statusSaving}
+                                >
+                                    {statusSaving ? "Saving..." : "Update Status"}
                                 </button>
                             </div>
 

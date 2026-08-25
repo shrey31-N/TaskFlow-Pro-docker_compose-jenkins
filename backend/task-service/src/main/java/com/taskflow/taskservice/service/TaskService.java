@@ -18,6 +18,8 @@ public interface TaskService {
 
     TaskResponse updateTask(Long id, UpdateTaskRequest request);
 
+    TaskResponse updateTaskStatus(Long id, com.taskflow.taskservice.entity.TaskStatus status, Long callerId, String callerRole);
+
     void deleteTask(Long id);
 
     List<TaskResponse> getTasksByProject(Long projectId);

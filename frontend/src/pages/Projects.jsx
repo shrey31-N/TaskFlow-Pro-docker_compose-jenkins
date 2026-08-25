@@ -17,10 +17,12 @@ import { useAuth } from "../context/AuthContext";
 import {
     createProject,
     deleteProject,
+    getProjectById,
     getProjects,
     searchProjects,
     updateProject,
 } from "../api/projectApi";
+import { getTasksByUser } from "../api/taskApi";
 import { getErrorMessage } from "../utils/errors";
 
 const PAGE_SIZE = 5;
@@ -62,7 +64,7 @@ function Projects() {
 
     const [deletingId, setDeletingId] = useState(null);
 
-    const loadProjects = async () => {
+    const loadAdminProjects = async () => {
         setLoading(true);
         setError("");
 
@@ -86,11 +88,47 @@ function Projects() {
         }
     };
 
+    // Members have no direct "projects assigned to me" endpoint - a project
+    // has no membership concept server-side, only an ownerId. Instead we
+    // derive their project list from the distinct projectIds on their own
+    // assigned tasks.
+    const loadMemberProjects = async () => {
+        setLoading(true);
+        setError("");
+
+        try {
+            const myTasks = await getTasksByUser(user.id);
+            const taskList = Array.isArray(myTasks) ? myTasks : [];
+            const projectIds = [
+                ...new Set(taskList.map((task) => task.projectId).filter(Boolean)),
+            ];
+
+            const results = await Promise.all(
+                projectIds.map((id) => getProjectById(id).catch(() => null))
+            );
+
+            const found = results.filter(Boolean);
+            setProjects(found);
+            setTotalPages(1);
+            setTotalElements(found.length);
+        } catch (loadError) {
+            setError(getErrorMessage(loadError, "Couldn't load your projects."));
+            setProjects([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        loadProjects();
+        if (isAdmin) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            loadAdminProjects();
+        } else if (user?.id) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            loadMemberProjects();
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, activeSearch]);
+    }, [page, activeSearch, isAdmin, user?.id]);
 
     const handleSearchSubmit = (event) => {
         event.preventDefault();
@@ -145,7 +183,7 @@ function Projects() {
             }
 
             closeModal();
-            await loadProjects();
+            await loadAdminProjects();
         } catch (saveError) {
             setFormError(getErrorMessage(saveError, "Couldn't save project."));
         } finally {
@@ -163,7 +201,7 @@ function Projects() {
 
         try {
             await deleteProject(project.id);
-            await loadProjects();
+            await loadAdminProjects();
         } catch (deleteError) {
             setError(getErrorMessage(deleteError, "Couldn't delete project."));
         } finally {
@@ -176,34 +214,42 @@ function Projects() {
 
             <div className="page-header">
                 <div>
-                    <h1>Projects</h1>
-                    <p>Create and manage the projects your team is working on.</p>
+                    <h1>{isAdmin ? "Projects" : "My Projects"}</h1>
+                    <p>
+                        {isAdmin
+                            ? "Create and manage the projects your team is working on."
+                            : "Projects containing tasks assigned to you."}
+                    </p>
                 </div>
 
-                <button className="primary-button" onClick={openCreateModal}>
-                    <Plus size={18} />
-                    New Project
-                </button>
+                {isAdmin && (
+                    <button className="primary-button" onClick={openCreateModal}>
+                        <Plus size={18} />
+                        New Project
+                    </button>
+                )}
             </div>
 
             {error && <div className="error-banner">{error}</div>}
 
-            <div className="filter-bar">
-                <form className="search-box wide" onSubmit={handleSearchSubmit}>
-                    <Search size={18} />
-                    <input
-                        type="text"
-                        placeholder="Search projects by name..."
-                        value={searchTerm}
-                        onChange={(event) => setSearchTerm(event.target.value)}
-                    />
-                    {activeSearch && (
-                        <button type="button" className="icon-button" onClick={clearSearch}>
-                            <X size={16} />
-                        </button>
-                    )}
-                </form>
-            </div>
+            {isAdmin && (
+                <div className="filter-bar">
+                    <form className="search-box wide" onSubmit={handleSearchSubmit}>
+                        <Search size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search projects by name..."
+                            value={searchTerm}
+                            onChange={(event) => setSearchTerm(event.target.value)}
+                        />
+                        {activeSearch && (
+                            <button type="button" className="icon-button" onClick={clearSearch}>
+                                <X size={16} />
+                            </button>
+                        )}
+                    </form>
+                </div>
+            )}
 
             <div className="dashboard-card table-card">
 
@@ -213,9 +259,11 @@ function Projects() {
                     <div className="empty-state">
                         <FolderKanban size={32} />
                         <p>
-                            {activeSearch
-                                ? `No projects match "${activeSearch}".`
-                                : "No projects yet. Create your first one to get started."}
+                            {isAdmin
+                                ? activeSearch
+                                    ? `No projects match "${activeSearch}".`
+                                    : "No projects yet. Create your first one to get started."
+                                : "You don't have any assigned tasks yet, so no projects to show."}
                         </p>
                     </div>
                 ) : (
@@ -262,13 +310,15 @@ function Projects() {
                                                     <ListTodo size={16} />
                                                 </button>
 
-                                                <button
-                                                    className="icon-button"
-                                                    title="Edit project"
-                                                    onClick={() => openEditModal(project)}
-                                                >
-                                                    <Pencil size={16} />
-                                                </button>
+                                                {isAdmin && (
+                                                    <button
+                                                        className="icon-button"
+                                                        title="Edit project"
+                                                        onClick={() => openEditModal(project)}
+                                                    >
+                                                        <Pencil size={16} />
+                                                    </button>
+                                                )}
 
                                                 {isAdmin && (
                                                     <button
@@ -290,7 +340,7 @@ function Projects() {
                     </div>
                 )}
 
-                {!activeSearch && totalPages > 1 && (
+                {isAdmin && !activeSearch && totalPages > 1 && (
                     <div className="pagination">
                         <button
                             className="page-button"
@@ -318,7 +368,7 @@ function Projects() {
 
             </div>
 
-            {modalOpen && (
+            {isAdmin && modalOpen && (
                 <div className="modal-backdrop" onClick={closeModal}>
                     <div className="modal" onClick={(event) => event.stopPropagation()}>
 

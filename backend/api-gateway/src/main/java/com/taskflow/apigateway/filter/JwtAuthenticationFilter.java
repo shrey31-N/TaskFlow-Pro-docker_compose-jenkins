@@ -75,13 +75,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String email = jwtService.extractEmail(token);
         String role = jwtService.extractRole(token);
+        Long userId = jwtService.extractUserId(token);
         log.debug("Authenticated request to {} as {} ({})", path, email, role);
 
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 email, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        filterChain.doFilter(request, response);
+        // Downstream services (task-service, project-service, ...) have no
+        // JWT validation of their own - they trust these headers because
+        // only this gateway, sitting in front of them, can set them.
+        UserHeaderRequestWrapper wrappedRequest = new UserHeaderRequestWrapper(request);
+        wrappedRequest.addHeader("X-User-Id", userId != null ? String.valueOf(userId) : null);
+        wrappedRequest.addHeader("X-User-Email", email);
+        wrappedRequest.addHeader("X-User-Role", role);
+
+        filterChain.doFilter(wrappedRequest, response);
     }
 
     private boolean isPublicPath(String path) {

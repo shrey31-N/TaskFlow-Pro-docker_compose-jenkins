@@ -9,7 +9,9 @@ import com.taskflow.taskservice.dto.UpdateTaskRequest;
 import com.taskflow.taskservice.dto.UserResponse;
 import com.taskflow.taskservice.entity.Task;
 import com.taskflow.taskservice.exception.ServiceUnavailableException;
+import com.taskflow.taskservice.exception.TaskAccessDeniedException;
 import com.taskflow.taskservice.exception.TaskNotFoundException;
+import com.taskflow.taskservice.entity.TaskStatus;
 import com.taskflow.taskservice.repository.TaskRepository;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
@@ -106,6 +108,23 @@ public class TaskServiceImpl implements TaskService {
         task.setProjectId(request.getProjectId());
         task.setAssignedUserId(request.getAssignedUserId());
 
+        Task updated = taskRepository.save(task);
+        return mapToResponse(updated);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateTaskStatus(Long id, TaskStatus status, Long callerId, String callerRole) {
+        Task task = findTaskOrThrow(id);
+
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
+        boolean isOwnTask = callerId != null && callerId.equals(task.getAssignedUserId());
+
+        if (!isAdmin && !isOwnTask) {
+            throw new TaskAccessDeniedException("You can only update the status of tasks assigned to you.");
+        }
+
+        task.setStatus(status);
         Task updated = taskRepository.save(task);
         return mapToResponse(updated);
     }

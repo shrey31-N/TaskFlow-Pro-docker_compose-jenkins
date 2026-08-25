@@ -4,6 +4,7 @@ import { CheckCircle2 } from "lucide-react";
 
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { registerAdmin } from "../api/authApi";
 import { getErrorMessage } from "../utils/errors";
 
 import heroImage from "../assets/hero.png";
@@ -14,15 +15,20 @@ function Register() {
     const { register } = useAuth();
     const { isDark } = useTheme();
 
-    // Self-registration always creates a Member account - there's no
-    // Account Type choice here. Promoting a Member to Admin is a separate,
-    // admin-only action (backend: PUT /api/users/{id}/promote-to-admin),
-    // not something you can grant yourself at signup.
+    // Account type only changes which endpoint gets called on submit:
+    // Member -> POST /api/users/register (always creates a Member).
+    // Admin  -> POST /api/users/register-admin, which the backend rejects
+    // unless adminSecretKey matches ADMIN_SECRET_KEY. There is no way to
+    // get an Admin account out of this form without that key - selecting
+    // "Admin" here does not grant anything by itself.
+    const [accountType, setAccountType] = useState("MEMBER");
+
     const [formData, setFormData] = useState({
         fullName: "",
         email: "",
         phone: "",
         password: "",
+        adminSecretKey: "",
     });
 
     const [error, setError] = useState("");
@@ -49,16 +55,25 @@ function Register() {
 
         try {
 
-            const result = await register(formData);
+            if (accountType === "ADMIN") {
+                const { fullName, email, phone, password, adminSecretKey } = formData;
+                await registerAdmin({ fullName, email, phone, password, adminSecretKey });
 
-            setSuccess("Account created successfully!");
+                setSuccess("Admin account created successfully! You can now log in.");
+                setTimeout(() => navigate("/"), 1200);
+            } else {
+                const { fullName, email, phone, password } = formData;
+                const result = await register({ fullName, email, phone, password });
 
-            setTimeout(() => {
-                // If registration also logged the user in (returned a
-                // token), skip straight to the dashboard instead of
-                // sending them back to the login form.
-                navigate(result?.token ? "/dashboard" : "/");
-            }, 1000);
+                setSuccess("Account created successfully!");
+
+                setTimeout(() => {
+                    // If registration also logged the user in (returned a
+                    // token), skip straight to the dashboard instead of
+                    // sending them back to the login form.
+                    navigate(result?.token ? "/dashboard" : "/");
+                }, 1000);
+            }
 
         } catch (error) {
 
@@ -107,6 +122,32 @@ function Register() {
                     {success && <div className="success-banner">{success}</div>}
 
                     <form onSubmit={handleSubmit}>
+
+                        <div className="field">
+                            <label>Account Type</label>
+                            <div className="account-type-toggle">
+                                <label className="radio-option">
+                                    <input
+                                        type="radio"
+                                        name="accountType"
+                                        value="MEMBER"
+                                        checked={accountType === "MEMBER"}
+                                        onChange={() => setAccountType("MEMBER")}
+                                    />
+                                    Member
+                                </label>
+                                <label className="radio-option">
+                                    <input
+                                        type="radio"
+                                        name="accountType"
+                                        value="ADMIN"
+                                        checked={accountType === "ADMIN"}
+                                        onChange={() => setAccountType("ADMIN")}
+                                    />
+                                    Admin
+                                </label>
+                            </div>
+                        </div>
 
                         <div className="field">
                             <label htmlFor="register-fullName">Full Name</label>
@@ -160,12 +201,31 @@ function Register() {
                             />
                         </div>
 
+                        {accountType === "ADMIN" && (
+                            <div className="field">
+                                <label htmlFor="register-adminSecretKey">Admin Secret Key</label>
+                                <input
+                                    id="register-adminSecretKey"
+                                    type="password"
+                                    name="adminSecretKey"
+                                    value={formData.adminSecretKey}
+                                    onChange={handleChange}
+                                    autoComplete="off"
+                                    required
+                                />
+                            </div>
+                        )}
+
                         <button
                             type="submit"
                             className="primary-button auth-submit"
                             disabled={loading}
                         >
-                            {loading ? "Creating account..." : "Create Account"}
+                            {loading
+                                ? "Creating account..."
+                                : accountType === "ADMIN"
+                                    ? "Create Admin Account"
+                                    : "Create Account"}
                         </button>
 
                     </form>

@@ -51,8 +51,18 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/actuator/info"
                         ).permitAll()
+                        // Create/delete/reassign are Admin-only; Members get a single
+                        // narrow carve-out (PATCH .../status) to update just the status
+                        // of their own tasks - enforced again, by ownership, inside
+                        // task-service itself using the X-User-Id header this gateway
+                        // attaches (see JwtAuthenticationFilter).
                         .requestMatchers(HttpMethod.DELETE, "/api/tasks/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/projects/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/tasks").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/tasks/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/tasks/*/status").hasAnyRole("MEMBER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/projects").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/projects/**").hasRole("ADMIN")
                         .requestMatchers("/api/tasks/**", "/api/projects/**", "/api/notifications/**")
                         .hasAnyRole("MEMBER", "ADMIN")
                         .anyRequest().authenticated()
