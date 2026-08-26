@@ -445,36 +445,42 @@ pipeline {
                 echo ========================================
 
                 aws ecs update-service --cluster taskflow-pro-cluster --service taskflow-user-service --force-new-deployment --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO DEPLOY: taskflow-user-service & exit /b 1)
 
                 echo ========================================
                 echo        DEPLOY TASKFLOW-PROJECT-SERVICE
                 echo ========================================
 
                 aws ecs update-service --cluster taskflow-pro-cluster --service taskflow-project-service --force-new-deployment --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO DEPLOY: taskflow-project-service & exit /b 1)
 
                 echo ========================================
                 echo        DEPLOY TASKFLOW-TASK-SERVICE
                 echo ========================================
 
                 aws ecs update-service --cluster taskflow-pro-cluster --service taskflow-task-service --force-new-deployment --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO DEPLOY: taskflow-task-service & exit /b 1)
 
                 echo ========================================
                 echo        DEPLOY TASKFLOW-NOTIFICATION-SERVICE
                 echo ========================================
 
                 aws ecs update-service --cluster taskflow-pro-cluster --service taskflow-notification-service --force-new-deployment --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO DEPLOY: taskflow-notification-service & exit /b 1)
 
                 echo ========================================
                 echo        DEPLOY TASKFLOW-API-GATEWAY
                 echo ========================================
 
                 aws ecs update-service --cluster taskflow-pro-cluster --service taskflow-api-gateway --force-new-deployment --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO DEPLOY: taskflow-api-gateway & exit /b 1)
 
                 echo ========================================
                 echo        DEPLOY TASKFLOW-DISCOVERY-SERVER
                 echo ========================================
 
                 aws ecs update-service --cluster taskflow-pro-cluster --service taskflow-discovery-server --force-new-deployment --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO DEPLOY: taskflow-discovery-server & exit /b 1)
 
                     '''
                 }
@@ -504,21 +510,27 @@ pipeline {
 
                 echo Waiting for taskflow-user-service to stabilize...
                 aws ecs wait services-stable --cluster taskflow-pro-cluster --services taskflow-user-service --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO STABILIZE: taskflow-user-service & exit /b 1)
 
                 echo Waiting for taskflow-project-service to stabilize...
                 aws ecs wait services-stable --cluster taskflow-pro-cluster --services taskflow-project-service --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO STABILIZE: taskflow-project-service & exit /b 1)
 
                 echo Waiting for taskflow-task-service to stabilize...
                 aws ecs wait services-stable --cluster taskflow-pro-cluster --services taskflow-task-service --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO STABILIZE: taskflow-task-service & exit /b 1)
 
                 echo Waiting for taskflow-notification-service to stabilize...
                 aws ecs wait services-stable --cluster taskflow-pro-cluster --services taskflow-notification-service --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO STABILIZE: taskflow-notification-service & exit /b 1)
 
                 echo Waiting for taskflow-api-gateway to stabilize...
                 aws ecs wait services-stable --cluster taskflow-pro-cluster --services taskflow-api-gateway --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO STABILIZE: taskflow-api-gateway & exit /b 1)
 
                 echo Waiting for taskflow-discovery-server to stabilize...
                 aws ecs wait services-stable --cluster taskflow-pro-cluster --services taskflow-discovery-server --region %AWS_REGION%
+                if errorlevel 1 (echo FAILED TO STABILIZE: taskflow-discovery-server & exit /b 1)
 
                     '''
                 }
