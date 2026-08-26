@@ -1138,3 +1138,115 @@ resource "aws_iam_role_policy" "ecs_secrets_access" {
     ]
   })
 }
+
+# ============================================================
+# S3 BUCKET - PROFILE IMAGE UPLOADS
+# ============================================================
+
+resource "random_id" "profile_images_suffix" {
+  byte_length = 4
+}
+
+resource "aws_s3_bucket" "profile_images" {
+  bucket = "taskflow-pro-profile-images-${random_id.profile_images_suffix.hex}"
+
+  tags = {
+    Name = "taskflow-pro-profile-images"
+  }
+}
+
+# Profile pictures are served as plain public URLs (see S3Service.buildFileUrl
+# in user-service), so the bucket needs public GET access - but only under the
+# profile-images/ prefix that the app actually writes to.
+resource "aws_s3_bucket_public_access_block" "profile_images" {
+  bucket = aws_s3_bucket.profile_images.id
+
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "profile_images_public_read" {
+  bucket     = aws_s3_bucket.profile_images.id
+  depends_on = [aws_s3_bucket_public_access_block.profile_images]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Sid       = "PublicReadProfileImages"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.profile_images.arn}/profile-images/*"
+      }
+    ]
+  })
+}
+
+
+# ============================================================
+# S3 PROFILE IMAGES - APPLICATION IAM USER
+# ============================================================
+
+# A dedicated IAM user, scoped only to this bucket's profile-images/ prefix,
+# for user-service to use via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+# Do NOT reuse a broader-permission key here.
+resource "aws_iam_user" "profile_images_uploader" {
+  name = "taskflow-profile-images-uploader"
+
+  tags = {
+    Name = "taskflow-pro-profile-images-uploader"
+  }
+}
+
+resource "aws_iam_user_policy" "profile_images_uploader" {
+  name = "taskflow-profile-images-s3-access"
+  user = aws_iam_user.profile_images_uploader.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject"
+        ]
+
+        Resource = "${aws_s3_bucket.profile_images.arn}/profile-images/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = aws_s3_bucket.profile_images.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "profile_images_uploader" {
+  user = aws_iam_user.profile_images_uploader.name
+}
+
+output "profile_images_bucket_name" {
+  description = "Set as AWS_S3_BUCKET in .env"
+  value       = aws_s3_bucket.profile_images.bucket
+}
+
+output "profile_images_access_key_id" {
+  description = "Set as AWS_ACCESS_KEY_ID in .env"
+  value       = aws_iam_access_key.profile_images_uploader.id
+  sensitive   = true
+}
+
+output "profile_images_secret_access_key" {
+  description = "Set as AWS_SECRET_ACCESS_KEY in .env"
+  value       = aws_iam_access_key.profile_images_uploader.secret
+  sensitive   = true
+}
