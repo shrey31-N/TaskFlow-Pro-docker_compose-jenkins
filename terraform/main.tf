@@ -1250,3 +1250,142 @@ output "profile_images_secret_access_key" {
   value       = aws_iam_access_key.profile_images_uploader.secret
   sensitive   = true
 }
+
+
+# ============================================================
+# ECR REPOSITORIES - discovery-server & api-gateway
+# ============================================================
+# These two task definitions (above) already reference ECR image URLs
+# for these repos, but the repos themselves were never declared here -
+# CI/CD pushes to them would fail with "repository does not exist"
+# until these are created.
+
+resource "aws_ecr_repository" "discovery_server" {
+  name                 = "taskflow-discovery-server"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "taskflow-discovery-server"
+  }
+}
+
+resource "aws_ecr_repository" "api_gateway" {
+  name                 = "taskflow-api-gateway"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "taskflow-api-gateway"
+  }
+}
+
+
+# ============================================================
+# JENKINS CI/CD - IAM USER
+# ============================================================
+# Scoped to exactly what the pipeline needs: push images to this app's
+# six ECR repos, and roll a new deployment on this app's ECS services
+# in this app's cluster only. Nothing broader.
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_user" "jenkins_cicd" {
+  name = "taskflow-jenkins-cicd"
+
+  tags = {
+    Name = "taskflow-jenkins-cicd"
+  }
+}
+
+resource "aws_iam_user_policy" "jenkins_cicd" {
+  name = "taskflow-jenkins-ecr-ecs-deploy"
+  user = aws_iam_user.jenkins_cicd.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Sid      = "ECRAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "ECRPushPull"
+        Effect = "Allow"
+
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:BatchGetImage",
+          "ecr:DescribeRepositories",
+          "ecr:DescribeImages"
+        ]
+
+        Resource = [
+          aws_ecr_repository.user_service.arn,
+          aws_ecr_repository.project_service.arn,
+          aws_ecr_repository.task_service.arn,
+          aws_ecr_repository.notification_service.arn,
+          aws_ecr_repository.discovery_server.arn,
+          aws_ecr_repository.api_gateway.arn
+        ]
+      },
+      {
+        Sid    = "ECSRollDeployment"
+        Effect = "Allow"
+
+        Action = [
+          "ecs:UpdateService",
+          "ecs:DescribeServices",
+          "ecs:ListTasks",
+          "ecs:DescribeTasks"
+        ]
+
+        Resource = "*"
+
+        Condition = {
+          ArnEquals = {
+            "ecs:cluster" = aws_ecs_cluster.taskflow.arn
+          }
+        }
+      },
+      {
+        # DescribeTaskDefinition doesn't support resource-level scoping -
+        # read-only metadata, no secrets are exposed in the response.
+        Sid      = "ECSDescribeTaskDefinition"
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeTaskDefinition"]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "jenkins_cicd" {
+  user = aws_iam_user.jenkins_cicd.name
+}
+
+output "jenkins_cicd_access_key_id" {
+  description = "Jenkins credential 'aws-ecr-credentials' (Username) - AWS access key ID"
+  value       = aws_iam_access_key.jenkins_cicd.id
+  sensitive   = true
+}
+
+output "jenkins_cicd_secret_access_key" {
+  description = "Jenkins credential 'aws-ecr-credentials' (Password) - AWS secret access key"
+  value       = aws_iam_access_key.jenkins_cicd.secret
+  sensitive   = true
+}
