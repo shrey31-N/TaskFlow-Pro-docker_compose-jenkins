@@ -1,4 +1,5 @@
 # TaskFlow-Pro
 Project: TaskFlow Pro AI-inspired Team Project Management Platform  (Inspired by Jira + Trello + Notion)
 
-<img width="1600" height="1465" alt="image" src="https://github.com/user-attachments/assets/499d88e5-8338-4bf1-aa1e-a51717769999" />
+<img width="1600" height="1465" alt="TashFlow-Pro-Infrastructure-diagram" src="https://github.com/user-attachments/assets/50bb6c89-283c-4439-89c4-117a7ee6aab5" />
+
