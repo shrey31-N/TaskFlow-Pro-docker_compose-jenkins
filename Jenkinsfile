@@ -4,8 +4,8 @@ pipeline {
 
     environment {
         AWS_REGION = 'ap-south-1'
-        AWS_ACCOUNT_ID = '253924916082'
-        ECR_REGISTRY = '253924916082.dkr.ecr.ap-south-1.amazonaws.com'
+        AWS_ACCOUNT_ID = '235038253059'
+        ECR_REGISTRY = '235038253059.dkr.ecr.ap-south-1.amazonaws.com'
     }
 
     stages {

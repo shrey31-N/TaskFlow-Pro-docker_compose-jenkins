@@ -2,7 +2,7 @@
     "containerDefinitions": [
         {
             "name": "user-service",
-            "image": "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-user-service:latest",
+            "image": "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-user-service:latest",
             "cpu": 0,
             "portMappings": [
                 {
@@ -31,11 +31,11 @@
             "secrets": [
                 {
                     "name": "DB_USERNAME",
-                    "valueFrom": "arn:aws:secretsmanager:ap-south-1:253924916082:secret:taskflow/pro/database-FR6obO:username::"
+                    "valueFrom": "arn:aws:secretsmanager:ap-south-1:235038253059:secret:taskflow/pro/database-FR6obO:username::"
                 },
                 {
                     "name": "DB_PASSWORD",
-                    "valueFrom": "arn:aws:secretsmanager:ap-south-1:253924916082:secret:taskflow/pro/database-FR6obO:password::"
+                    "valueFrom": "arn:aws:secretsmanager:ap-south-1:235038253059:secret:taskflow/pro/database-FR6obO:password::"
                 }
             ],
             "logConfiguration": {
@@ -50,7 +50,7 @@
         }
     ],
     "family": "taskflow-user-service",
-    "executionRoleArn": "arn:aws:iam::253924916082:role/taskflow-ecs-task-execution-role",
+    "executionRoleArn": "arn:aws:iam::235038253059:role/taskflow-ecs-task-execution-role",
     "networkMode": "awsvpc",
     "volumes": [],
     "placementConstraints": [],

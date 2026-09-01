@@ -412,7 +412,7 @@ resource "aws_ecs_task_definition" "user_service" {
   container_definitions = jsonencode([
     {
       name      = "user-service"
-      image     = "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-user-service:latest"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-user-service:latest"
       essential = true
 
       environment = [
@@ -494,7 +494,7 @@ resource "aws_ecs_task_definition" "project_service" {
   container_definitions = jsonencode([
     {
       name      = "project-service"
-      image     = "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-project-service:latest"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-project-service:latest"
       essential = true
 
       environment = [
@@ -572,7 +572,7 @@ resource "aws_ecs_task_definition" "task_service" {
   container_definitions = jsonencode([
     {
       name      = "task-service"
-      image     = "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-task-service:latest"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-task-service:latest"
       essential = true
 
       environment = [
@@ -650,7 +650,7 @@ resource "aws_ecs_task_definition" "notification_service" {
   container_definitions = jsonencode([
     {
       name      = "notification-service"
-      image     = "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-notification-service:latest"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-notification-service:latest"
       essential = true
 
       portMappings = [
@@ -702,7 +702,7 @@ resource "aws_ecs_task_definition" "discovery_server" {
   container_definitions = jsonencode([
     {
       name      = "discovery-server"
-      image     = "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-discovery-server:latest"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-discovery-server:latest"
       essential = true
 
       portMappings = [
@@ -754,7 +754,7 @@ resource "aws_ecs_task_definition" "api_gateway" {
   container_definitions = jsonencode([
     {
       name      = "api-gateway"
-      image     = "253924916082.dkr.ecr.ap-south-1.amazonaws.com/taskflow-api-gateway:latest"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-api-gateway:latest"
       essential = true
 
       portMappings = [
@@ -1371,4 +1371,54 @@ output "jenkins_cicd_secret_access_key" {
   description = "Jenkins credential 'aws-ecr-credentials' (Password) - AWS secret access key"
   value       = aws_iam_access_key.jenkins_cicd.secret
   sensitive   = true
+}
+
+
+# ============================================================
+# BILLING - MONTHLY BUDGET + ALERTS
+# ============================================================
+# The identity running `terraform apply` needs Budgets permissions
+# (e.g. the AWS managed policy "Billing" or "AWSBudgetsActionsWithAWSResourceControlAccess")
+# for this resource to apply cleanly.
+
+resource "aws_budgets_budget" "monthly_cost" {
+  name         = "taskflow-pro-monthly-budget"
+  budget_type  = "COST"
+  limit_amount = "20"
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 50
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = ["nshreyas215@gmail.com"]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 80
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = ["nshreyas215@gmail.com"]
+  }
+
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "ACTUAL"
+    subscriber_email_addresses = ["nshreyas215@gmail.com"]
+  }
+
+  # Heads-up before you actually cross 100%, based on AWS's forecast of
+  # where this month is trending - not just where it already is.
+  notification {
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_email_addresses = ["nshreyas215@gmail.com"]
+  }
 }
