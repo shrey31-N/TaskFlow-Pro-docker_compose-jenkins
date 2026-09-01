@@ -1256,34 +1256,17 @@ output "profile_images_secret_access_key" {
 # ECR REPOSITORIES - discovery-server & api-gateway
 # ============================================================
 # These two task definitions (above) already reference ECR image URLs
-# for these repos, but the repos themselves were never declared here -
-# CI/CD pushes to them would fail with "repository does not exist"
-# until these are created.
+# for these repos, and it turns out the repos already exist in AWS
+# (created outside this Terraform config, before it tracked them) -
+# a `resource` block here collides with that (RepositoryAlreadyExists).
+# Reference them as data instead of trying to (re)create them.
 
-resource "aws_ecr_repository" "discovery_server" {
-  name                 = "taskflow-discovery-server"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name = "taskflow-discovery-server"
-  }
+data "aws_ecr_repository" "discovery_server" {
+  name = "taskflow-discovery-server"
 }
 
-resource "aws_ecr_repository" "api_gateway" {
-  name                 = "taskflow-api-gateway"
-  image_tag_mutability = "MUTABLE"
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name = "taskflow-api-gateway"
-  }
+data "aws_ecr_repository" "api_gateway" {
+  name = "taskflow-api-gateway"
 }
 
 
@@ -1339,8 +1322,8 @@ resource "aws_iam_user_policy" "jenkins_cicd" {
           aws_ecr_repository.project_service.arn,
           aws_ecr_repository.task_service.arn,
           aws_ecr_repository.notification_service.arn,
-          aws_ecr_repository.discovery_server.arn,
-          aws_ecr_repository.api_gateway.arn
+          data.aws_ecr_repository.discovery_server.arn,
+          data.aws_ecr_repository.api_gateway.arn
         ]
       },
       {
