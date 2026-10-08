@@ -270,73 +270,6 @@ Docker provides:
 - Easy scaling
 
 ---
-
-# ☁️ AWS Services Used
-
-| AWS Service | Purpose |
-|---|---|
-| **EC2** | Compute environment / application hosting |
-| **VPC** | Network isolation |
-| **Subnet** | Network segmentation |
-| **Security Groups** | Instance-level firewall |
-| **Application Load Balancer** | Distributes HTTP/HTTPS traffic |
-| **Amazon RDS** | Relational database |
-| **Amazon ECR** | Docker image registry |
-| **Amazon S3** | Object/file storage |
-| **Amazon SNS** | Notifications |
-| **CloudWatch** | Logs and monitoring |
-| **IAM** | Authentication and authorization |
-| **Route 53** | DNS management — optional |
-| **CloudFront** | CDN — optional depending on deployment |
-
----
-
-# 🏗️ Infrastructure as Code — Terraform
-
-Terraform is used to provision and manage AWS infrastructure.
-
-Instead of manually creating resources through the AWS Console:
-
-```text
-Terraform Code
-      │
-      ▼
-terraform init
-      │
-      ▼
-terraform plan
-      │
-      ▼
-terraform apply
-      │
-      ▼
-AWS Infrastructure
-```
-
-Terraform can manage resources such as:
-
-- VPC
-- Subnets
-- Security Groups
-- EC2
-- Load Balancer
-- Target Groups
-- IAM
-- RDS
-- S3
-- Other AWS resources
-
-### Benefits of Terraform
-
-- Infrastructure as Code
-- Repeatable deployments
-- Version-controlled infrastructure
-- Automated provisioning
-- Reduced manual configuration
-- Easy infrastructure recreation
-
----
-
 # 🔧 Jenkins
 
 **Jenkins** is used as the CI/CD automation server.
@@ -357,13 +290,6 @@ Jenkins
    │
    ├── Docker Build
    │
-   ├── Push to ECR
-   │
-   ├── Terraform Init
-   │
-   ├── Terraform Plan
-   │
-   ├── Terraform Apply
    │
    └── Deploy
 ```
@@ -381,13 +307,7 @@ Test
    ↓
 Docker Build
    ↓
-Docker Push
-   ↓
-Terraform Init
-   ↓
-Terraform Plan
-   ↓
-Terraform Apply
+Docker compose
    ↓
 Deployment
 ```
@@ -426,88 +346,6 @@ Jenkins
     ▼
 CI/CD Pipeline
 ```
-
----
-
-# 📦 Amazon ECR
-
-Amazon Elastic Container Registry (**ECR**) stores Docker images generated during the CI pipeline.
-
-```text
-Source Code
-     │
-     ▼
-Jenkins
-     │
-     ▼
-Docker Build
-     │
-     ▼
-Docker Image
-     │
-     ▼
-Amazon ECR
-     │
-     ▼
-Deployment Environment
-```
-
-Example:
-
-```text
-taskflow/user-service:latest
-taskflow/project-service:latest
-taskflow/task-service:latest
-taskflow/notification-service:latest
-```
-
----
-
-# 🗄️ Database
-
-The backend services use a relational database hosted using **Amazon RDS**.
-
-```text
-User Service ───────┐
-                    │
-Project Service ────┤
-                    ├──► Amazon RDS
-Task Service ───────┤
-                    │
-Notification ───────┘
-```
-
-The database stores application data such as:
-
-- Users
-- Projects
-- Tasks
-- Task/project relationships
-- Application-related information
-
----
-
-# 🔔 Notification System
-
-The Notification Service is responsible for sending application notifications.
-
-```text
-Application Event
-       │
-       ▼
-Notification Service
-       │
-       ▼
-Amazon SNS
-       │
-       ▼
-Notification Delivery
-```
-
-This architecture allows notification functionality to remain independent from the other microservices.
-
----
-
 # 📁 Project Structure
 
 A possible repository structure:
@@ -518,32 +356,28 @@ TaskFlow-Pro/
 ├── frontend/
 │   └── React Application
 │
-├── user-service/
-│   ├── src/
-│   ├── pom.xml
-│   └── Dockerfile
+|
+|--- Backend
+|        ├── user-service/
+|       │   ├── src/
+|       │   ├── pom.xml
+|       │   └── Dockerfile
+|       │
+|       ├── project-service/
+|       │   ├── src/
+|       │   ├── pom.xml
+|       │   └── Dockerfile
+|       │
+|       ├── task-service/
+|       │   ├── src/
+|       │   ├── pom.xml
+|       │   └── Dockerfile
+|       │
+|       ├── notification-service/
+|       │   ├── src/
+|       │   ├── pom.xml
+|       │   └── Dockerfile
 │
-├── project-service/
-│   ├── src/
-│   ├── pom.xml
-│   └── Dockerfile
-│
-├── task-service/
-│   ├── src/
-│   ├── pom.xml
-│   └── Dockerfile
-│
-├── notification-service/
-│   ├── src/
-│   ├── pom.xml
-│   └── Dockerfile
-│
-├── terraform/
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   ├── provider.tf
-│   └── terraform.tfvars
 │
 ├── Jenkinsfile
 ├── docker-compose.yml
@@ -619,137 +453,7 @@ TaskFlow-Pro/
 
 ---
 
-# 🔐 Security
 
-Security is implemented using AWS networking and access-control mechanisms.
-
-```text
-Internet
-   │
-   ▼
-Application Load Balancer
-   │
-   ▼
-Security Group
-   │
-   ▼
-Application
-   │
-   ▼
-RDS
-```
-
-Security components include:
-
-- AWS IAM
-- Security Groups
-- Private/Public subnets
-- Controlled inbound/outbound traffic
-- Environment variables for configuration
-- Docker container isolation
-- GitHub secret protection
-- Jenkins credentials management
-
-**Never store AWS access keys, database passwords, API keys, or other secrets directly in the repository.**
-
----
-
-# 📊 Monitoring
-
-Amazon CloudWatch can be used to monitor:
-
-- Application logs
-- EC2 metrics
-- CPU utilization
-- Memory-related metrics where configured
-- Load balancer metrics
-- Application errors
-- Infrastructure health
-
-Monitoring flow:
-
-```text
-Application
-     │
-     ▼
-AWS Infrastructure
-     │
-     ▼
-CloudWatch
-     │
-     ├── Logs
-     ├── Metrics
-     └── Alarms
-```
-
----
-
-# 🔄 Complete DevOps Lifecycle
-
-The complete TaskFlow-Pro DevOps workflow can be summarized as:
-
-```text
-                    ┌─────────────┐
-                    │  Developer  │
-                    └──────┬──────┘
-                           │
-                       Git Push
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │    GitHub   │
-                    └──────┬──────┘
-                           │
-                        Webhook
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │   Jenkins   │
-                    └──────┬──────┘
-                           │
-                ┌──────────┴──────────┐
-                │                     │
-                ▼                     ▼
-           Build & Test          Terraform
-                │                     │
-                ▼                     ▼
-           Docker Build          AWS Infra
-                │
-                ▼
-             AWS ECR
-                │
-                ▼
-          Application Deploy
-                │
-                ▼
-         Application Load
-             Balancer
-                │
-                ▼
-          Microservices
-                │
-        ┌───────┼────────┐
-        ▼       ▼        ▼
-      User   Project    Task
-     Service  Service   Service
-        │       │        │
-        └───────┼────────┘
-                ▼
-             RDS
-                │
-                ▼
-          Notifications
-                │
-                ▼
-              SNS
-
-                +
-                
-           CloudWatch
-          Monitoring
-```
-
----
 
 # 🎯 Key DevOps Concepts Demonstrated
 
@@ -762,24 +466,6 @@ This project demonstrates practical knowledge of:
 - ✅ Jenkinsfile
 - ✅ Docker
 - ✅ Docker Compose
-- ✅ Containerization
-- ✅ Amazon ECR
-- ✅ AWS EC2
-- ✅ AWS VPC
-- ✅ Subnets
-- ✅ Security Groups
-- ✅ Application Load Balancer
-- ✅ Amazon RDS
-- ✅ Amazon S3
-- ✅ Amazon SNS
-- ✅ IAM
-- ✅ CloudWatch
-- ✅ Infrastructure as Code
-- ✅ Terraform
-- ✅ Automated deployment
-- ✅ Microservices architecture
-- ✅ REST APIs
-- ✅ Application monitoring
 
 ---
 
@@ -856,21 +542,6 @@ Jenkins builds the Spring Boot services and executes tests.
 
 Jenkins creates Docker images.
 
-### Step 7 — ECR
-
-Docker images are pushed to Amazon ECR.
-
-### Step 8 — Terraform
-
-Terraform provisions or updates the AWS infrastructure.
-
-### Step 9 — Deployment
-
-The new application version is deployed to the AWS environment.
-
-### Step 10 — Monitoring
-
-CloudWatch is used to monitor the deployed application and infrastructure.
 
 ---
 
