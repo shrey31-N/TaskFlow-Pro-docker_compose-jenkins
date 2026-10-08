@@ -333,6 +333,18 @@ resource "aws_ecr_repository" "notification_service" {
   }
 }
 
+resource "aws_ecr_repository" "frontend" {
+  name                 = "taskflow-frontend"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "taskflow-frontend"
+  }
+}
 
 # ============================================================
 # ECS CLUSTER
@@ -778,7 +790,56 @@ resource "aws_ecs_task_definition" "api_gateway" {
   ])
 }
 
+# ============================================================
+# FRONTEND LOGS
+# ============================================================
 
+resource "aws_cloudwatch_log_group" "frontend" {
+  name              = "/ecs/taskflow/frontend"
+  retention_in_days = 7
+}
+
+
+# ============================================================
+# FRONTEND TASK DEFINITION
+# ============================================================
+
+resource "aws_ecs_task_definition" "frontend" {
+  family                   = "taskflow-frontend"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+
+  cpu    = "256"
+  memory = "512"
+
+  execution_role_arn = aws_iam_role.ecs_task_execution.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = "frontend"
+      image     = "235038253059.dkr.ecr.ap-south-1.amazonaws.com/taskflow-frontend:latest"
+      essential = true
+
+      portMappings = [
+        {
+          containerPort = 80
+          hostPort      = 80
+          protocol      = "tcp"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+
+        options = {
+          awslogs-group         = "/ecs/taskflow/frontend"
+          awslogs-region        = "ap-south-1"
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
 # ============================================================
 # APPLICATION LOAD BALANCER
 # ============================================================
@@ -831,6 +892,34 @@ resource "aws_lb_target_group" "api_gateway" {
 
 
 # ============================================================
+# FRONTEND TARGET GROUP
+# ============================================================
+
+resource "aws_lb_target_group" "frontend" {
+  name        = "taskflow-frontend-tg"
+  port        = 80
+  protocol    = "HTTP"
+  target_type = "ip"
+
+  vpc_id = aws_vpc.taskflow_vpc.id
+
+  health_check {
+    enabled             = true
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+  }
+
+  tags = {
+    Name = "taskflow-frontend-tg"
+  }
+}
+
+# ============================================================
 # USER SERVICE TARGET GROUP
 # ============================================================
 
@@ -849,7 +938,57 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.api_gateway.arn
   }
 }
+# ============================================================
+# ALB API GATEWAY LISTENER RULE
+# ============================================================
 
+resource "aws_lb_listener_rule" "api_gateway" {
+
+  listener_arn = aws_lb_listener.http.arn
+
+  priority = 50
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api_gateway.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/*"]
+    }
+  }
+
+  depends_on = [
+    aws_ecs_service.api_gateway
+  ]
+}
+
+# ============================================================
+# ALB FRONTEND LISTENER RULE
+# ============================================================
+
+resource "aws_lb_listener_rule" "frontend" {
+
+  listener_arn = aws_lb_listener.http.arn
+
+  priority = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/*"]
+    }
+  }
+
+  depends_on = [
+    aws_lb_listener.http
+  ]
+}
 
 # ============================================================
 # ECS USER SERVICE
@@ -1022,6 +1161,45 @@ resource "aws_ecs_service" "api_gateway" {
   ]
 }
 
+
+# ============================================================
+# ECS FRONTEND SERVICE
+# ============================================================
+
+resource "aws_ecs_service" "frontend" {
+
+  name            = "taskflow-frontend"
+  cluster         = aws_ecs_cluster.taskflow.id
+  task_definition = aws_ecs_task_definition.frontend.arn
+
+  desired_count = 1
+  launch_type   = "FARGATE"
+
+  network_configuration {
+
+    subnets = [
+      aws_subnet.private_1.id,
+      aws_subnet.private_2.id
+    ]
+
+    security_groups = [
+      aws_security_group.ecs.id
+    ]
+
+    assign_public_ip = false
+  }
+
+  load_balancer {
+
+    target_group_arn = aws_lb_target_group.frontend.arn
+    container_name   = "frontend"
+    container_port   = 80
+  }
+
+  depends_on = [
+    aws_lb_listener.http
+  ]
+}
 
 # ============================================================
 # RDS SUBNET GROUP
@@ -1256,17 +1434,40 @@ output "profile_images_secret_access_key" {
 # ECR REPOSITORIES - discovery-server & api-gateway
 # ============================================================
 # These two task definitions (above) already reference ECR image URLs
-# for these repos, and it turns out the repos already exist in AWS
-# (created outside this Terraform config, before it tracked them) -
-# a `resource` block here collides with that (RepositoryAlreadyExists).
-# Reference them as data instead of trying to (re)create them.
+# for these repos, but the repos themselves need to be created here -
+# on a fresh account there is nothing for Terraform to find yet.
+#
+# NOTE: in the old (now-suspended) account these two happened to
+# already exist outside Terraform's tracking, so this was briefly a
+# `data` lookup instead. If you ever import/inherit an account where
+# these repos already exist, switch this block back to `data` (and
+# the two references below back to `data.aws_ecr_repository....arn`)
+# rather than trying to `resource`-create over them.
 
-data "aws_ecr_repository" "discovery_server" {
-  name = "taskflow-discovery-server"
+resource "aws_ecr_repository" "discovery_server" {
+  name                 = "taskflow-discovery-server"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "taskflow-discovery-server"
+  }
 }
 
-data "aws_ecr_repository" "api_gateway" {
-  name = "taskflow-api-gateway"
+resource "aws_ecr_repository" "api_gateway" {
+  name                 = "taskflow-api-gateway"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Name = "taskflow-api-gateway"
+  }
 }
 
 
@@ -1322,8 +1523,8 @@ resource "aws_iam_user_policy" "jenkins_cicd" {
           aws_ecr_repository.project_service.arn,
           aws_ecr_repository.task_service.arn,
           aws_ecr_repository.notification_service.arn,
-          data.aws_ecr_repository.discovery_server.arn,
-          data.aws_ecr_repository.api_gateway.arn
+          aws_ecr_repository.discovery_server.arn,
+          aws_ecr_repository.api_gateway.arn
         ]
       },
       {
