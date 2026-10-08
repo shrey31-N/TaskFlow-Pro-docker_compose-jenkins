@@ -13,7 +13,7 @@ pipeline {
                 sh "docker --version"
             }
         }
-        stage('Build Microservices') {
+        stage('Build Microservices at once') {
             steps {
 
                 dir('backend/discovery-server') {
@@ -72,7 +72,7 @@ pipeline {
             echo "Taskflow-pro pipeline completed successfully....!"
         }
         failure{
-            echo "Taskflow-pro pipeline failed....!"
+            echo "Taskflow-pro pipeline failed......!"
         }
     }
 }

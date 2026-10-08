@@ -1,4 +1,4 @@
-services:
+ services:
 
     mysql:
         image: mysql:8.0
@@ -150,9 +150,9 @@ services:
             - taskflow-network
 
         
-networks:
+ networks:
     taskflow-network:
         driver: bridge
 
-volumes:
+ volumes:
     mysql-data:
